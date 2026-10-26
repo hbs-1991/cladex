@@ -75,6 +75,9 @@ test("the calendar's agenda and item dialog fit a phone, in the phone's own time
   await page.getByRole("button", { name: new RegExp(CONTENT_TITLE) }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByLabel("Text")).toBeVisible();
+  // The item opens in a side drawer that slides in from the right: measured mid-slide
+  // it still hangs off the screen, so wait for the slide to end.
+  await dialog.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished)));
   const box = await dialog.boundingBox();
   expect(box!.x).toBeGreaterThanOrEqual(0);
   expect(box!.x + box!.width).toBeLessThanOrEqual(390);    // inside the screen, with its margin

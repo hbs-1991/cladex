@@ -35,7 +35,7 @@ test-stack: test-db ## the full test stack: PostgreSQL + Redis + MinIO
 	MSYS_NO_PATHCONV=1 docker run -d --name hermes-test-minio \
 	  -e MINIO_ROOT_USER=hermes -e MINIO_ROOT_PASSWORD=hermes-test \
 	  -p 127.0.0.1:59000:9000 -p 127.0.0.1:59001:9001 \
-	  quay.io/minio/minio:latest server /data --console-address :9001
+	  pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data --console-address :9001
 	@echo "postgres 127.0.0.1:55432  redis 127.0.0.1:56379  minio 127.0.0.1:59000 (console :59001)"
 
 .PHONY: test lint gate

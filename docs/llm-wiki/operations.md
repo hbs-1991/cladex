@@ -75,7 +75,7 @@ worker + scheduler + cloudflared` ([[decision.redis-taskiq-scaling]]).
 |---|---|---|
 | `db` | `postgres:16-alpine`, volume `pgdata` | `POSTGRES_PASSWORD` |
 | `redis` | `redis:7-alpine --appendonly yes`, volume `redisdata` — the queue and the locks (`lock:oauth:<name>`; the curator's `lock:curator`, `lock:curator:<id>`, `lock:curator:sweep`; and `lock:review`, the one-review-at-a-time slot — see *The curator per user* below) | — |
-| `minio` | `quay.io/minio/minio server /data --console-address :9001`, volume `miniodata` — uploads and agent-produced files ([[decision.minio-blobs]]). **quay.io, not Docker Hub**, which stopped serving `minio/minio` (commit `2ba221a`); `mc` in the deploy script's mirror moved with it | `MINIO_ROOT_USER` (defaults to `hermes`), `MINIO_ROOT_PASSWORD` |
+| `minio` | `pgsty/minio:RELEASE.2026-08-04T00-00-00Z server /data --console-address :9001`, volume `miniodata` — uploads and agent-produced files ([[decision.minio-blobs]]). **`pgsty/minio`, pinned**: MinIO stopped publishing images — Docker Hub dropped `minio/minio` (commit `2ba221a`), then `quay.io/minio/*` began answering 401 to anonymous pulls — so the image is Pigsty's community build of the same source, and `mc` in the deploy script's mirror is `pgsty/mc`. A host with the old image cached keeps running it until the next pull; a fresh host could not start at all | `MINIO_ROOT_USER` (defaults to `hermes`), `MINIO_ROOT_PASSWORD` |
 | `agent` | HTTP, Telegram polling, **the migrations** — and since Wave 3b it *starts* turns rather than running them: it writes the `turns` row, enqueues the task and watches the lane | everything |
 | `worker` | scheduled jobs, learning reviews (in the tree of whoever's turn nudged them, since 4b), the curator sweep (one pass per user) **and the turns** (`--max-async-tasks 4`). N of them are safe; it never polls Telegram | the same image, mounts and environment as `agent` — one YAML anchor, so they cannot drift. **Including `TELEGRAM_BOT_TOKEN`**: whichever process runs a turn sends its `ask_user` keyboard and its `send_document` |
 | `scheduler` | a stateless enqueuer of two periodic tasks; a duplicate is harmless. `scheduler_tick` also reaps turns whose worker died, and with `content_enabled` runs the content plan's tick (queue due items, wake the publisher through `wake_if_idle`) — idempotent across workers like the claim | Redis only |
@@ -329,7 +329,7 @@ A usable backup is therefore three things: the dump, the bucket and the volume.
 ```bash
 D=$(date +%F)
 docker compose exec -T db pg_dump -U hermes hermes | gzip > hermes-db-$D.sql.gz
-# the bucket, through minio/mc inside minio's own network namespace, so no port
+# the bucket, through `mc` inside minio's own network namespace, so no port
 # has to be published and the endpoint is the one minio itself listens on. The two
 # MinIO values are picked out of .env with sed rather than sourced: `. ./.env` would
 # put the bot token and the Fernet key into the environment of everything that
@@ -337,7 +337,7 @@ docker compose exec -T db pg_dump -U hermes hermes | gzip > hermes-db-$D.sql.gz
 U=$(sed -n 's/^MINIO_ROOT_USER=//p' .env | head -1)
 P=$(sed -n 's/^MINIO_ROOT_PASSWORD=//p' .env | head -1)
 docker run --rm --network "container:$(docker compose ps -q minio)" \
-  -v "$HOME/hermes-$D-blobs:/backup" --entrypoint sh minio/mc -c \
+  -v "$HOME/hermes-$D-blobs:/backup" --entrypoint sh pgsty/mc:RELEASE.2026-10-25T00-00-00Z -c \
   "mc alias set src http://127.0.0.1:9000 '${U:-hermes}' '$P' >/dev/null \
    && mc mirror --overwrite src/hermes /backup"
 # plus the existing data/ archive that scripts/deploy.sh takes

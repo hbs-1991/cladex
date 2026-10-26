@@ -187,7 +187,7 @@ if [[ -n "$MINIO_CID" ]]; then
   # `if !`, so a failure is a value this script decides about rather than the end
   # of it. `mc mirror` is one command away from the operator's data either way.
   if docker run --rm --network "container:$MINIO_CID" -v "$BLOBS:/backup" \
-      --entrypoint sh quay.io/minio/mc -c \
+      --entrypoint sh pgsty/mc:RELEASE.2026-10-25T00-00-00Z -c \
       "mc alias set src http://127.0.0.1:9000 '${MINIO_USER:-hermes}' '$MINIO_PASS' >/dev/null \
        && mc mirror --overwrite src/$BUCKET /backup"; then
     echo "  bucket '$BUCKET' mirrored to $BLOBS"

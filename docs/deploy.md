@@ -776,7 +776,7 @@ docker compose $COMPOSE exec -T db pg_dump -U hermes hermes | gzip > ~/hermes-$D
 # MinIO names (as scripts/deploy.sh does): sourcing the whole file would put the
 # bot token and the Fernet key into the environment of everything that follows.
 MINIO_USER=$(sed -n 's/^MINIO_ROOT_USER=//p' .env | head -1); MINIO_PASS=$(sed -n 's/^MINIO_ROOT_PASSWORD=//p' .env | head -1)
-docker run --rm --network "container:$(docker compose $COMPOSE ps -q minio)"   -v "$HOME/hermes-$D-blobs:/backup" --entrypoint sh quay.io/minio/mc -c   "mc alias set src http://127.0.0.1:9000 '${MINIO_USER:-hermes}' '$MINIO_PASS' >/dev/null && mc mirror --overwrite src/hermes /backup"
+docker run --rm --network "container:$(docker compose $COMPOSE ps -q minio)"   -v "$HOME/hermes-$D-blobs:/backup" --entrypoint sh pgsty/mc:RELEASE.2026-10-25T00-00-00Z -c   "mc alias set src http://127.0.0.1:9000 '${MINIO_USER:-hermes}' '$MINIO_PASS' >/dev/null && mc mirror --overwrite src/hermes /backup"
 # via a container, not a bare tar: see "the whole backup story" at the top of this
 # file for why a plain tar can be incomplete and still exit 0
 docker run --rm --user 0:0 -v "$PWD/data:/data:ro" -v "$HOME:/backup"   claude-hermes-agent sh -c "tar -czf /backup/hermes-$D.tar.gz -C / data; chown 1000:1000 /backup/hermes-$D.tar.gz"
