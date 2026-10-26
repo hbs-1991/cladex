@@ -1,0 +1,7 @@
+# Shell scripts are executed inside the Linux container. A CRLF checkout there
+# fails with `$'\r': command not found` before the first real line runs, so the
+# line ending is a correctness property, not formatting — pin it here rather than
+# relying on each committer's core.autocrlf. This repo is developed on Windows
+# (autocrlf=true), which is exactly the setup that stages CR bytes into a script
+# nobody notices until it reaches a server.
+*.sh text eol=lf

@@ -1,0 +1,241 @@
+[project]
+name = "claude-hermes"
+version = "0.1.0"
+description = "Self-improving personal agent on the Claude Agent SDK"
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # Pinned exactly: the SDK and the CLI are one protocol with two release trains,
+    # and an unpinned rebuild swaps them silently (0.2.120 -> 0.2.126 on 23.07.2026
+    # turned the CLI's ProcessError into a generic Exception and broke the runner's
+    # resume-retry). Bump deliberately, together with the CLI pin in the Dockerfile.
+    # 0.2.158 bundles CLI 2.1.280, the first that runs claude-opus-5-5 (2.1.218
+    # answered "does not support this model"); it also raises ResultError with the
+    # structured subtype/api_error_status a model rejection is classified by.
+    "claude-agent-sdk==0.2.158",
+    "aiogram>=3.7",
+    "pyyaml>=6.0",
+    "croniter>=2",
+    "httpx>=0.27",
+    # Web channel (spec 2026-09-08-cladex-web-ui-design): one Starlette app served by
+    # uvicorn inside the same asyncio loop as aiogram. python-multipart is what
+    # Starlette needs to parse `POST /api/uploads`.
+    "starlette>=0.40",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.30",
+    "alembic>=1.13",
+    "fastapi>=0.115",
+    "structlog>=24.1",
+    # Wave 3a — the queue, the blob store and the extension-secret box.
+    # `redis` is the client behind core/redis.py (locks, and in 3b the event bus)
+    # and behind taskiq-redis. `taskiq`/`taskiq-redis` are imported ONLY by
+    # workers/taskiq_app.py, lazily, inside functions: the app runs without them
+    # in inline mode, which is what keeps a laptop deployment to `db + agent`.
+    # `boto3` (not aiobotocore) drives MinIO from a thread — see the offline
+    # amendment in docs/superpowers/plans/2026-09-15-wave3a-queue-blobs-secrets.md.
+    "redis>=6.4",
+    "boto3>=1.40",
+    "cryptography>=48",
+    # Capped below 0.13: taskiq 0.13.0 dropped `model_dump` from `taskiq.compat`,
+    # which taskiq-redis 1.2.3 still imports — an image built on 2026-09-28 got
+    # both and the worker and scheduler could not import the broker at all.
+    "taskiq>=0.11,<0.13",
+    "taskiq-redis>=1.0",
+    # The IANA zone database for `zoneinfo` (the `timezone` config key, the content
+    # plan's wall-clock times). Linux images usually carry /usr/share/zoneinfo; a
+    # slim image or a Windows dev box does not, and `ZoneInfo("Asia/Tashkent")`
+    # there fails at boot. The package is the zone data and nothing else.
+    "tzdata>=2024.1",
+]
+
+[project.urls]
+Repository = "https://github.com/hbs-1991/cladex"
+Issues = "https://github.com/hbs-1991/cladex/issues"
+
+[project.optional-dependencies]
+# fakeredis lets the lock and (in 3b) the event-bus tests run with no container:
+# `make test-stack` is for the integration tests, not for every unit test.
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.6", "import-linter>=2.0",
+       "fakeredis>=2.23"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"claude_hermes.core.db" = ["migrations/*.mako", "migrations/versions/*.py"]
+
+[tool.ruff.lint]
+# The rules the gate has always meant: pycodestyle errors and pyflakes. Spelled out
+# rather than left to ruff's default, which grows with every release — a lint gate
+# that changes meaning on `pip install -U` stops being a gate.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+# The architecture gate. These contracts are the wall the Wave 2 module split is
+# built against: a violation is caught at `make gate` time, not at review time.
+[tool.importlinter]
+root_package = "claude_hermes"
+include_external_packages = true
+
+# The whole architecture in one contract, top to bottom: the three composition
+# roots (`main` the process, `http` the FastAPI assembly, `workers` the queue) may
+# import anything below them; a module may import `integrations` and `core`; an
+# integration is a thin adapter over one external SDK and may lean on `core` only;
+# `core` imports nothing of ours. `:` and not `|` between the roots: in
+# import-linter 2.x `a | b` are independent siblings, `a : b` are siblings that may
+# import each other — and the roots do (`main` imports `http.app` and
+# `workers.tasks`, `workers.taskiq_app` imports `main` lazily), because they are one
+# composition layer. Everything else is forbidden by position: nothing below a root
+# imports a root, an integration never reaches a module, core never reaches up.
+[[tool.importlinter.contracts]]
+name = "composition roots -> modules -> integrations -> core"
+type = "layers"
+layers = [
+    "claude_hermes.main : claude_hermes.http : claude_hermes.workers",
+    "claude_hermes.modules",
+    "claude_hermes.integrations",
+    "claude_hermes.core",
+]
+# The one deliberate core -> modules edge: Alembic needs every ORM model imported
+# before it can autogenerate or compare metadata, and the models live with their
+# modules by design.
+ignore_imports = ["claude_hermes.core.db.registry -> claude_hermes.modules.**"]
+
+# A module talks to another only through a consumer-side port satisfied at
+# composition; an import between two modules is the one edge no root can wire
+# around, so it is the one this contract refuses.
+[[tool.importlinter.contracts]]
+name = "modules are independent of each other"
+type = "independence"
+modules = ["claude_hermes.modules.*"]
+
+# A domain layer is value objects, rules and exceptions: no framework, no SDK, no
+# logging library. What it may import is `core` and the standard library.
+[[tool.importlinter.contracts]]
+name = "domain layers are pure"
+type = "forbidden"
+source_modules = ["claude_hermes.modules.*.domain"]
+forbidden_modules = [
+    "fastapi", "starlette", "httpx", "aiogram", "claude_agent_sdk", "structlog",
+]
+
+# An application service states what it needs as a Protocol; the framework, the SDK
+# and the SQL that satisfy it live in infrastructure or presentation. This contract
+# is what keeps a port from quietly becoming a SQLAlchemy query.
+[[tool.importlinter.contracts]]
+name = "application layers are framework-free"
+type = "forbidden"
+source_modules = ["claude_hermes.modules.*.application"]
+forbidden_modules = [
+    "fastapi", "starlette", "aiogram", "httpx", "sqlalchemy", "claude_agent_sdk",
+]
+
+# A router talks to services, never to a repository or to the bot API directly.
+[[tool.importlinter.contracts]]
+name = "presentation layers hold no persistence or transport"
+type = "forbidden"
+source_modules = ["claude_hermes.modules.*.presentation"]
+forbidden_modules = ["sqlalchemy", "aiogram"]
+
+# The four layers of every module: presentation and infrastructure are independent
+# siblings over application over domain. A module's `wiring.py`, when it has one,
+# sits outside the four and is what introduces the two siblings.
+[[tool.importlinter.contracts]]
+name = "identity layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.identity.presentation | claude_hermes.modules.identity.infrastructure",
+    "claude_hermes.modules.identity.application",
+    "claude_hermes.modules.identity.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "sessions layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.sessions.presentation | claude_hermes.modules.sessions.infrastructure",
+    "claude_hermes.modules.sessions.application",
+    "claude_hermes.modules.sessions.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "turns layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.turns.presentation | claude_hermes.modules.turns.infrastructure",
+    "claude_hermes.modules.turns.application",
+    "claude_hermes.modules.turns.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "files layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.files.presentation | claude_hermes.modules.files.infrastructure",
+    "claude_hermes.modules.files.application",
+    "claude_hermes.modules.files.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "scheduler layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.scheduler.presentation | claude_hermes.modules.scheduler.infrastructure",
+    "claude_hermes.modules.scheduler.application",
+    "claude_hermes.modules.scheduler.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "content layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.content.presentation | claude_hermes.modules.content.infrastructure",
+    "claude_hermes.modules.content.application",
+    "claude_hermes.modules.content.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "extensions layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.extensions.presentation | claude_hermes.modules.extensions.infrastructure",
+    "claude_hermes.modules.extensions.application",
+    "claude_hermes.modules.extensions.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "memory layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.memory.presentation | claude_hermes.modules.memory.infrastructure",
+    "claude_hermes.modules.memory.application",
+    "claude_hermes.modules.memory.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "learning layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.learning.presentation | claude_hermes.modules.learning.infrastructure",
+    "claude_hermes.modules.learning.application",
+    "claude_hermes.modules.learning.domain",
+]
+
+[[tool.importlinter.contracts]]
+name = "telegram layers"
+type = "layers"
+layers = [
+    "claude_hermes.modules.telegram.presentation | claude_hermes.modules.telegram.infrastructure",
+    "claude_hermes.modules.telegram.application",
+    "claude_hermes.modules.telegram.domain",
+]

@@ -1,0 +1,332 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+
+  /* Brand primitives: shared by themes; full logo uses its own SVG gradients. */
+  --cl-brand-ink: #0d0d12;
+  --cl-brand-orange: #ff9347;
+  --cl-brand-coral: #ff6837;
+  --cl-brand-violet: #6542f8;
+  --cl-brand-blue: #2d3cff;
+  --cl-brand-lavender: #dfd4ff;
+  --cl-brand-gradient: linear-gradient(135deg, #ff9347 0%, #fb875b 34%, #bc63be 61%, #6542f8 82%, #2d3cff 100%);
+
+
+  /* Neutral primitives: usages listed in the neutral-scale table. */
+  --cl-neutral-50: #fafafa;
+  --cl-neutral-100: #f5f5f5;
+  --cl-neutral-200: #e5e5e5;
+  --cl-neutral-300: #d4d4d4;
+  --cl-neutral-400: #a3a3a3;
+  --cl-neutral-500: #737373;
+  --cl-neutral-600: #525252;
+  --cl-neutral-700: #404040;
+  --cl-neutral-800: #262626;
+  --cl-neutral-900: #171717;
+  --cl-neutral-950: #0a0a0a;
+
+  /* Thread, composer, tool groups, file preview, dialogs, toasts. */
+  --background: #fafafa;
+  --foreground: #0d0d12;
+  --card: #ffffff;
+  --card-foreground: #0d0d12;
+  --popover: #ffffff;
+  --popover-foreground: #0d0d12;
+
+  --primary: #2d3cff;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #0d0d12;
+  --muted: #f5f5f5;
+  --muted-foreground: #525252;
+  --accent: #e5e5e5;
+  --accent-foreground: #0d0d12;
+  --destructive: #b91c1c;
+  --border: #e5e5e5;
+  --input: #737373;
+  --ring: #2d3cff;
+
+  /* Sidebar and conversation/routine navigation. */
+  --sidebar: #f5f5f5;
+  --sidebar-foreground: #0d0d12;
+  --sidebar-primary: #2d3cff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #eeecff;
+  --sidebar-accent-foreground: #2126ff;
+  --sidebar-border: #e5e5e5;
+  --sidebar-ring: #2d3cff;
+
+  /* CladeX extensions: status badges, interaction, modal backdrop. */
+  --cl-selected: #eeecff;
+  --cl-selected-foreground: #2126ff;
+  --cl-signal: #2d3cff;
+  --cl-success: #dcfce7;
+  --cl-success-foreground: #166534;
+  --cl-warning: #fef3c7;
+  --cl-warning-foreground: #92400e;
+  --cl-error: #fee2e2;
+  --cl-error-foreground: #991b1b;
+  --cl-on-destructive: #ffffff;
+  --cl-primary-hover: #2126ff;
+  --cl-scrim: rgb(0 0 0 / 40%);
+  --cl-disabled-opacity: 0.5;
+
+  /* Thread/composer spacing; base corner radius is 8px. */
+  --cl-space-unit: 0.25rem;
+  --radius: 0.5rem;
+  --cl-border-width: 1px;
+  --cl-border-strong: 2px;
+
+  /* Only floating surfaces receive a shadow. */
+  --cl-shadow-none: none;
+  --cl-shadow-floating: 0 8px 24px rgb(0 0 0 / 10%);
+
+  /* Existing columns and interactive controls. */
+  --cl-sidebar-width: 16rem;
+  --cl-sidebar-collapsed: 3rem;
+  --cl-sidebar-drawer: 18rem;
+  --cl-thread-max: 48rem;
+  --cl-thread-min: 32rem;
+  --cl-panel-width: 27rem;
+  --cl-control-height: 2.25rem;
+  --cl-touch-target: 2.75rem;
+
+  /* Layer ordering: thread through floating feedback. */
+  --cl-z-base: 0;
+  --cl-z-sticky: 10;
+  --cl-z-panel: 20;
+  --cl-z-scrim: 40;
+  --cl-z-dialog: 50;
+  --cl-z-popover: 60;
+  --cl-z-toast: 70;
+  --cl-z-tooltip: 80;
+
+  /* Tool group, stream, panel, thinking indicator, toast. */
+  --cl-motion-instant: 0ms;
+  --cl-motion-fast: 120ms;
+  --cl-motion-standard: 180ms;
+  --cl-motion-slow: 240ms;
+  --cl-motion-loop: 1200ms;
+  --cl-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --cl-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --cl-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  /* Tool rows, sidebar/composer actions, preview empty state. */
+  --cl-icon-sm: 1rem;
+  --cl-icon-md: 1.25rem;
+  --cl-icon-lg: 1.5rem;
+  --cl-icon-stroke: 1.75;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: #171717;
+  --foreground: #fafafa;
+  --card: #262626;
+  --card-foreground: #fafafa;
+  --popover: #262626;
+  --popover-foreground: #fafafa;
+
+  --primary: #a392ff;
+  --primary-foreground: #0d0d12;
+  --secondary: #262626;
+  --secondary-foreground: #d4d4d4;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --accent: #404040;
+  --accent-foreground: #fafafa;
+  --destructive: #b91c1c;
+  --border: #404040;
+  --input: #737373;
+  --ring: #b8adff;
+
+  --sidebar: #0d0d12;
+  --sidebar-foreground: #d4d4d4;
+  --sidebar-primary: #a392ff;
+  --sidebar-primary-foreground: #0d0d12;
+  --sidebar-accent: #30294d;
+  --sidebar-accent-foreground: #ded8ff;
+  --sidebar-border: #262626;
+  --sidebar-ring: #b8adff;
+
+  --cl-selected: #30294d;
+  --cl-selected-foreground: #ded8ff;
+  --cl-signal: #b8adff;
+  --cl-success: #142b1b;
+  --cl-success-foreground: #86efac;
+  --cl-warning: #35280d;
+  --cl-warning-foreground: #fcd34d;
+  --cl-error: #3b1515;
+  --cl-error-foreground: #fca5a5;
+  --cl-on-destructive: #ffffff;
+  --cl-primary-hover: #c4b8ff;
+  --cl-scrim: rgb(0 0 0 / 64%);
+  --cl-shadow-floating: 0 8px 24px rgb(0 0 0 / 36%);
+}
+
+@theme inline {
+  /* shadcn semantic colors. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* CladeX utilities; these are not component APIs. */
+  --color-brand-ink: var(--cl-brand-ink);
+  --color-brand-orange: var(--cl-brand-orange);
+  --color-brand-coral: var(--cl-brand-coral);
+  --color-brand-violet: var(--cl-brand-violet);
+  --color-brand-blue: var(--cl-brand-blue);
+  --color-brand-lavender: var(--cl-brand-lavender);
+  --color-selected: var(--cl-selected);
+  --color-selected-foreground: var(--cl-selected-foreground);
+  --color-signal: var(--cl-signal);
+  --color-success: var(--cl-success);
+  --color-success-foreground: var(--cl-success-foreground);
+  --color-warning: var(--cl-warning);
+  --color-warning-foreground: var(--cl-warning-foreground);
+  --color-error: var(--cl-error);
+  --color-error-foreground: var(--cl-error-foreground);
+  --color-on-destructive: var(--cl-on-destructive);
+  --color-primary-hover: var(--cl-primary-hover);
+  --color-scrim: var(--cl-scrim);
+
+  /* Prose/UI and tool-output typography. */
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1rem;
+  --text-xs--letter-spacing: 0.01em;
+
+  --text-code: 0.8125rem;
+  --text-code--line-height: 1.25rem;
+  --text-code--letter-spacing: 0;
+
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.25rem;
+  --text-sm--letter-spacing: 0;
+
+  --text-base: 1rem;
+  --text-base--line-height: 1.625rem;
+  --text-base--letter-spacing: 0;
+
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.625rem;
+  --text-lg--letter-spacing: -0.01em;
+
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-xl--letter-spacing: -0.015em;
+
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-2xl--letter-spacing: -0.02em;
+
+  /* Approved numeric spacing: 0, 0.5, 1, 2, 3, 4, 6, 8, 12. */
+  --spacing: var(--cl-space-unit);
+  --spacing-sidebar: var(--cl-sidebar-width);
+  --spacing-sidebar-collapsed: var(--cl-sidebar-collapsed);
+  --spacing-sidebar-drawer: var(--cl-sidebar-drawer);
+  --spacing-panel: var(--cl-panel-width);
+  --spacing-control: var(--cl-control-height);
+  --spacing-touch: var(--cl-touch-target);
+  --spacing-icon-sm: var(--cl-icon-sm);
+  --spacing-icon-md: var(--cl-icon-md);
+  --spacing-icon-lg: var(--cl-icon-lg);
+  --container-thread: var(--cl-thread-max);
+
+  --radius-none: 0;
+  --radius-sm: calc(var(--radius) - 0.25rem);
+  --radius-md: calc(var(--radius) - 0.125rem);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 0.25rem);
+  --radius-full: 9999px;
+
+  --shadow-none: var(--cl-shadow-none);
+  --shadow-floating: var(--cl-shadow-floating);
+
+  /* Literal breakpoints; do not replace with runtime var() values. */
+  --breakpoint-sm: 40rem;
+  --breakpoint-md: 48rem;
+  --breakpoint-lg: 64rem;
+  --breakpoint-xl: 80rem;
+
+  --ease-ui: var(--cl-ease-standard);
+  --ease-enter: var(--cl-ease-enter);
+  --ease-exit: var(--cl-ease-exit);
+  --animate-thinking: cl-thinking var(--cl-motion-loop) ease-in-out infinite;
+}
+
+@keyframes cl-thinking {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    font-synthesis: none;
+  }
+
+  code, pre, kbd, samp {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    font-variant-ligatures: none;
+  }
+
+  :focus-visible {
+    outline: var(--cl-border-strong) solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root, .dark {
+    --cl-motion-instant: 0ms;
+    --cl-motion-fast: 0ms;
+    --cl-motion-standard: 0ms;
+    --cl-motion-slow: 0ms;
+    --cl-motion-loop: 0ms;
+  }
+
+  *, *::before, *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

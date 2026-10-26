@@ -1,0 +1,173 @@
+# Behavioral settings (secrets go in .env)
+model: claude-sonnet-5         # the deploy default: every lane nobody chose a model for
+# The models a user may switch a chat to — the composer's picker, /model in
+# Telegram, a routine's form. Only the OFFER: window, prices, efforts and the
+# spelling the CLI needs live in src/claude_hermes/core/model_catalog.py. `model`
+# above is always offered, even when missing here. Add a model only after
+# scripts/model_matrix.py has proved it on the pinned CLI under the production
+# token (docs/deploy.md, "Offering a model"). Removing one moves every chat that
+# was on it at its next turn, one cold cache write each.
+models: [claude-sonnet-5, claude-opus-5-5, claude-fable-5-1]
+# On CLI 2.1.280 every one of these, and claude-opus-5, gets its full 1M window
+# unsuffixed; an older CLI needed `claude-opus-5[1m]`. Either spelling works here.
+max_turns: 50
+group_require_mention: true
+
+# Sessions are eternal within a Telegram thread. Set either of these to re-enable
+# the old timer-based resets (idle_reset_hours: 24.0, daily_reset_hour: 4).
+idle_reset_hours: null
+daily_reset_hour: null
+
+rich_enabled: true                              # false → plain messages, no drafts
+title_model: claude-haiku-4-5-20251001          # cheap one-shot that names new threads
+
+# Voice — needs OPENAI_API_KEY in .env. Send a voice note, the agent transcribes it;
+# when the reply is ready it comes back as text AND a voice message.
+stt_model: gpt-4o-mini-transcribe               # or whisper-1 (older, cheaper)
+tts_model: gpt-4o-mini-tts                      # or tts-1 / tts-1-hd
+tts_voice: alloy                                # alloy, echo, fable, onyx, nova, shimmer
+voice_reply_enabled: true                       # false → transcribe in, reply text-only
+tts_max_chars: 4000                             # cap on how much of a reply gets voiced
+
+# Phase 2 — learning loop
+wiki_nudge_interval: 4       # review the wiki every N user turns without a wiki write
+skill_nudge_interval: 15     # review skills every N tool iterations without a skill write
+review_model: ""             # empty = the deploy default `model`. Free to be cheaper: the
+                             # fork runs its own narrow toolset, so it never reads a
+                             # lane's cache whatever model it is. Its window must hold
+                             # the longest chat it reviews.
+review_max_turns: 16
+curator_enabled: true
+stale_after_days: 30
+archive_after_days: 90
+allowed_users: []            # Telegram user ids; owner is claimed by first private chat
+# Whether a non-owner user's turns (and routines) get Bash, Agent and Task —
+# the DEFAULT for a user with no choice of their own. Set it per person in
+# Settings → Users; a person you have switched there ignores this key. Keep the
+# default false unless everyone on `allowed_users` trusts everyone else: one
+# container is one uid, so a shell reaches every other user's workspace and
+# credentials whatever the read guard says. Their Read/Write/Edit/Glob/Grep are
+# confined to their own tree either way. Editing it means restarting the agent
+# AND the worker together (each process reads its own copy of this file).
+users_shell_enabled: false
+# Connectors are per user: each person enables their own from the shared catalog
+# and signs in with their own account. Installing a PLUGIN (a git clone that runs
+# in the shared container) and adding a new catalog entry stay the owner's.
+
+# Whether the learning loop runs for a non-owner user — the DEFAULT for a user
+# with no choice of their own; set it per person in Settings → Users. Off by
+# default, and it is a cost decision: for a user with learning on, their turns
+# are observed — one review fork per wiki_nudge_interval (4) turns without a
+# wiki write and per skill_nudge_interval (15) tool uses — and the curator runs
+# a pass over their tree, with a wiki lint that is an LLM fork of up to
+# curator_max_turns. All of it on the owner's account, and nothing meters it per
+# user yet. The one bound that holds either way: one review fork at a time,
+# deploy-wide. Their skill library, `skill_admin` and the Skills page are per
+# user regardless. Editing it means restarting the agent and the worker together.
+users_learning_enabled: false
+# The `memory_search` tool over the wiki index (full-text plus the pages a hit
+# links to), on private and web lanes. Flipping it changes the toolset, so every
+# conversation starts a fresh session at the next boot.
+memory_search_enabled: true
+wiki_index_max_chars: 8000   # above this the injected wiki index is truncated, loudly
+wiki_lint_enabled: true      # kill switch for the curator's wiki-lint phase
+wiki_lint_dry_run: false     # report only; change nothing on disk
+
+# Phase 4 — curator: scheduling, backups, consolidation
+curator_interval_hours: 168  # 7 days between curator passes
+curator_min_idle_hours: 2    # skip the pass unless the agent has been idle this long
+curator_tick_seconds: 900    # how often the curator loop re-checks its gates
+backup_keep: 5               # skill-tree snapshots retained
+curator_consolidate: false   # LLM umbrella-building pass — opt-in (prune-only by default)
+curator_dry_run: false       # report only; archive nothing
+curator_model: ""            # empty = review_model, then main model
+curator_max_turns: 30
+
+# Phase 3 — cron
+cron_tick_seconds: 30        # ticker poll interval, seconds
+cron_timeout_seconds: 180    # default hard timeout per run; a job may ask for its own
+                             # (cron_manage timeout_seconds=..., 30-1800) and that wins
+cron_model: ""               # empty = same as main model
+
+# The owner's clock: an IANA zone name. The content plan reads a time with no
+# offset ("2026-10-01 10:00") in this zone and shows the agent times in it. A name
+# zoneinfo does not know stops the boot. Cron expressions stay UTC regardless.
+timezone: UTC                # e.g. Asia/Tashkent
+
+# The content plan behind the Calendar page (docs/content-calendar.md): the
+# /api/content routes, the `content_plan` tool on the owner's private and web
+# lanes and in the owner's routines, and the tick that publishes approved items
+# through the publisher routine. Deploy owner only. Flipping it changes the
+# toolset, so every conversation starts a fresh session at the next boot.
+content_enabled: false
+content_channels: [linkedin, telegram, x, threads, instagram, youtube]
+# How many hours before its publish time a theme-approved item is drafted: the
+# content drafter routine is woken then, and the post arrives as a Telegram card.
+content_draft_lead_hours: 24
+
+# Phase 4 — extensions (MCP servers and plugins from the curated catalog)
+ext_probe_timeout_seconds: 60      # a server gets this long to complete its handshake
+plugin_clone_timeout_seconds: 120  # `git clone` of a catalog plugin
+
+# Phase 6 — CladeX web UI. Off by default: with web_enabled false the HTTP server
+# is never constructed and the process behaves exactly as it did before. The secret
+# that signs the session cookie is CH_WEB_SECRET in .env, never here — secrets stay
+# out of config.yaml (PRD P7).
+web_enabled: false                 # true → serve the browser UI inside this process
+web_port: 8080                     # container-internal only; no host port is published
+web_public_origin: ""              # https://cladex.example.com — Origin check + widget domain
+web_upload_max_mb: 20              # per-file cap on POST /api/uploads
+web_tool_output_max_chars: 8000    # tool.result output above this is truncated for the UI
+web_session_days: 30               # lifetime of the cladex_session cookie
+web_menu_button: true              # on boot, point the bot's menu button at web_public_origin (a Telegram Mini App)
+
+# Telegram transport. "polling" is what the bot has always done, is the default,
+# and is the only sane local-dev mode. "webhook" is live since Wave 4a: the
+# process registers the URL with Telegram at boot and blocks on the web server
+# instead of polling, so updates arrive as POSTs to /telegram/webhook/<secret> on
+# the web app. It requires web_enabled: true and a web_public_origin Telegram can
+# reach, and the secret lives in CH_TELEGRAM_WEBHOOK_SECRET in .env — never here.
+# Both Caddy and the Cloudflare Tunnel already forward every path, so there is no
+# proxy change to make; see docs/deploy.md, "Webhook mode".
+#
+# It is also what makes `docker compose up --scale agent=N` possible at all —
+# only one process may long-poll a bot token, while N may receive webhooks. That
+# needs BOTH this key AND CH_REDIS_URL: in inline mode every instance starts its
+# own CronTicker and curator loop, which is N clocks over one database.
+telegram_mode: polling             # polling | webhook
+
+# Wave 3a — queue, blobs, extension state.
+#
+# There is no `queue_mode` key: it is derived from CH_REDIS_URL in .env. Set that
+# and scheduled jobs, learning reviews and curator passes are enqueued for the
+# `worker` container; leave it unset and they run in this process exactly as
+# before — a laptop needs only `db + agent`. In queue mode `cron run_now` fires
+# on the next 60-second cron tick rather than after cron_tick_seconds.
+review_timeout_seconds: 900        # lease on the learning-review gate: how long a
+                                   # review may hold it before the curator and the
+                                   # turn service stop waiting on a dead worker
+
+# Blobs. `local` is the filesystem store under agent_home that the app has always
+# had. `s3` puts uploads and agent-produced files in the bucket and keeps the
+# on-disk inbox/outbox tree as a cache under the same keys, so the agent's own
+# Read/Glob still find them. The credentials are CH_S3_ACCESS_KEY and
+# CH_S3_SECRET_KEY in .env — never here.
+blob_backend: local                # local | s3
+s3_endpoint: ""                    # http://minio:9000 under docker-compose
+s3_bucket: hermes
+s3_region: us-east-1
+
+# Wave 3b — a turn is a row in `turns` and a task on the queue, not a coroutine in
+# the handler that received the message. These four dials govern that row.
+turn_lease_seconds: 60          # dead-man's switch on a running turn: the worker
+                                # heartbeats every lease/3, and a lapsed lease is
+                                # what lets the reaper free the lane
+turn_queue_timeout_seconds: 300 # how long a queued turn may hold a lane before it
+                                # is reaped — the queue message that vanished — and
+                                # how long a second Telegram message waits for a
+                                # busy lane before giving up
+turn_snapshot_ttl_seconds: 3600 # lifetime of the in-flight snapshot in Redis, so a
+                                # killed worker's keys age out on their own
+turn_retention_days: 30         # finished turn rows are pruned after this; the row
+                                # is a third copy of the text and the reply, not a
+                                # history feature

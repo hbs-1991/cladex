@@ -1,0 +1,16 @@
+manifest_version: 1
+name: amplitude
+label: Amplitude
+description: >
+  Product analytics from Amplitude — events, charts and cohorts behind a funnel or a
+  retention curve. Amplitude's hosted MCP server (US data centre; EU projects live on
+  mcp.eu.amplitude.com and need a custom connector). Sign in with your Amplitude account.
+version: "1"
+transport: http
+url: https://mcp.amplitude.com/mcp
+scopes: [turn, cron]
+auth:
+  - name: AMPLITUDE_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${AMPLITUDE_MCP_TOKEN}"

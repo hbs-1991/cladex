@@ -1,0 +1,140 @@
+name: deploy
+
+# Manual only, on purpose. Every push to main would mean an outage per merge —
+# short, but an outage — on a bot somebody is talking to, and the agent may be
+# mid-turn: stopping the stack kills that turn, loses its reply and leaves the
+# lane's SDK session unbound (see docs/llm-wiki/operations.md). Deploying is a
+# decision, so it stays a button.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Commit, tag or branch to deploy"
+        default: main
+        required: true
+      skip_tests:
+        description: "Deploy without re-running the gate (use only to roll back fast)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production      # two deploys at once would race on the same checkout
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    # The gate the deployed commit has to pass. `web.yml` only fires on `web/**`,
+    # so a backend-only commit reaches production having had no frontend CI at all
+    # unless this job runs it. Playwright is left out: it needs a browser download
+    # and covers the same code the unit tests and the type-checker do, and this job
+    # sits between a person pressing the button and the outage starting.
+    if: ${{ !inputs.skip_tests }}
+    runs-on: ubuntu-latest
+    # The suite talks to a real PostgreSQL now — every test process creates its own
+    # database on this server. Every port here is the one the matching
+    # `CH_TEST_*` default already points at (see tests/conftest.py and the
+    # `test-stack` make target), so the job needs no extra environment and CI and
+    # a laptop cannot drift apart.
+    #
+    # Redis and MinIO are optional for the suite: their fixtures skip when the
+    # service is down. CI runs them anyway — a skipped integration test on the one
+    # machine that gates a deploy is a test that is not protecting anything.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: hermes, POSTGRES_PASSWORD: hermes, POSTGRES_DB: hermes }
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hermes" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["56379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+      # MinIO is NOT a service container: a `services:` entry cannot pass a
+      # command, and `quay.io/minio/minio` needs `server /data` as one. It is started as
+      # a step below instead — the same `docker run` the `test-stack` target uses.
+    env:
+      # Explicit rather than relying on the defaults: if a port above is ever
+      # changed, the suite fails here loudly instead of silently skipping the
+      # Redis and MinIO tests.
+      CH_TEST_DATABASE_URL: postgresql+asyncpg://hermes:hermes@127.0.0.1:55432/hermes
+      CH_TEST_REDIS_URL: redis://127.0.0.1:56379/15
+      CH_TEST_S3_ENDPOINT: http://127.0.0.1:59000
+      CH_TEST_S3_ACCESS_KEY: hermes
+      CH_TEST_S3_SECRET_KEY: hermes-test
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: "${{ inputs.ref }}" }
+
+      - name: Start MinIO
+        run: |
+          set -euo pipefail
+          docker run -d --name ci-minio \
+            -e MINIO_ROOT_USER=hermes -e MINIO_ROOT_PASSWORD=hermes-test \
+            -p 59000:9000 quay.io/minio/minio:latest server /data
+          # The blob tests skip on a connection error, so a MinIO that never came
+          # up would turn into a quiet pass. Wait for it and fail here instead.
+          for _ in $(seq 30); do
+            curl -sf http://127.0.0.1:59000/minio/health/live && exit 0
+            sleep 2
+          done
+          echo "MinIO did not become healthy"; docker logs ci-minio; exit 1
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q -p no:cacheprovider
+      - run: python -m ruff check src tests scripts
+      - run: lint-imports
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+        working-directory: web
+      - run: npm run lint && npm run typecheck && npm run test && npm run build
+        working-directory: web
+
+  deploy:
+    needs: [verify]
+    # `always()` so a deliberate skip_tests run still reaches this job; the guard
+    # below is what actually decides, and a *failed* verify never passes it.
+    if: ${{ always() && (inputs.skip_tests || needs.verify.result == 'success') }}
+    runs-on: ubuntu-latest
+    environment: production      # attach a required reviewer here to gate the button
+    steps:
+      - name: Set up the deploy key
+        env:
+          KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          test -n "$KEY" || { echo "DEPLOY_SSH_KEY is not set"; exit 1; }
+          # No ssh-keyscan fallback. A key learned at connect time is a key nobody
+          # checked, and the one time it mattered — a host key that had changed —
+          # the refusal to connect was the whole value of the check.
+          test -n "$KNOWN_HOSTS" || { echo "DEPLOY_KNOWN_HOSTS is not set (ssh-keyscan -H <host>)"; exit 1; }
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/id_deploy && chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          HOST: ${{ vars.DEPLOY_HOST }}
+          USER_NAME: ${{ vars.DEPLOY_USER }}
+          REF: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o IdentitiesOnly=yes \
+            "${USER_NAME:-deploy}@${HOST:?DEPLOY_HOST variable is not set}" \
+            "cd ~/claude-hermes && ./scripts/deploy.sh '${REF}'"
+
+      - name: Public smoke test
+        env:
+          ORIGIN: ${{ vars.PUBLIC_ORIGIN }}
+        run: |
+          set -euo pipefail
+          [ -n "${ORIGIN:-}" ] || { echo "PUBLIC_ORIGIN not set — skipping"; exit 0; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$ORIGIN/api/config")
+          echo "$ORIGIN/api/config -> $code"
+          [ "$code" = "200" ]

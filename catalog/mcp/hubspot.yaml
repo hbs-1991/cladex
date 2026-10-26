@@ -1,0 +1,16 @@
+manifest_version: 1
+name: hubspot
+label: HubSpot
+description: >
+  Contacts, companies, deals and engagements in your HubSpot CRM — look records up,
+  read the history and write updates. HubSpot's hosted MCP server: sign in with your
+  HubSpot account and pick the portal the agent may reach.
+version: "1"
+transport: http
+url: https://mcp.hubspot.com/anthropic
+scopes: [turn, cron]
+auth:
+  - name: HUBSPOT_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${HUBSPOT_MCP_TOKEN}"

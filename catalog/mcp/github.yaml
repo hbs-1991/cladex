@@ -1,0 +1,16 @@
+manifest_version: 1
+name: github
+label: GitHub
+description: >
+  Repositories, issues, pull requests and code search on GitHub.
+  GitHub's hosted MCP server: sign in with your GitHub account. For a token
+  instead of a sign-in, use "GitHub (token)".
+version: "1"
+transport: http
+url: https://api.githubcopilot.com/mcp/
+scopes: [turn, cron]
+auth:
+  - name: GITHUB_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${GITHUB_MCP_TOKEN}"

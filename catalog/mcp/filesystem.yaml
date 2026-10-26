@@ -1,0 +1,12 @@
+manifest_version: 1
+name: filesystem
+label: Filesystem
+description: >
+  Read, write and search files under the agent's state directory. The official
+  MCP filesystem server, scoped to /data — the same volume the agent already
+  owns, so it grants no reach the Bash tool did not already have.
+version: 1.0.0
+transport: stdio
+command: npx
+args: ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
+scopes: [turn, cron]

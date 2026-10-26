@@ -1,0 +1,16 @@
+manifest_version: 1
+name: atlassian
+label: Atlassian
+description: >
+  Jira issues and Confluence pages — search, read, create and comment. Atlassian's
+  hosted MCP server covers both products: sign in with your Atlassian account, and
+  the site's permissions decide what the agent may see.
+version: "1"
+transport: http
+url: https://mcp.atlassian.com/v1/mcp
+scopes: [turn, cron]
+auth:
+  - name: ATLASSIAN_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${ATLASSIAN_MCP_TOKEN}"

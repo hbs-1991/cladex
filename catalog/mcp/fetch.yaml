@@ -1,0 +1,12 @@
+manifest_version: 1
+name: fetch
+label: Fetch
+description: >
+  Fetch a URL and convert it to markdown for the model. The official MCP fetch
+  server. Overlaps WebFetch, and is here mainly because it is a no-auth stdio
+  server that proves the transport end to end.
+version: 1.0.0
+transport: stdio
+command: uvx
+args: ["mcp-server-fetch"]
+scopes: [turn, cron]

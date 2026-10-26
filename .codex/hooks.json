@@ -1,0 +1,27 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "command": "root=\"$(git rev-parse --show-toplevel 2\u003e/dev/null)\" \u0026\u0026 [ -x \"$root/.llm-wiki/llm-wiki\" ] \u0026\u0026 \"$root/.llm-wiki/llm-wiki\" hook session-start || exit 0",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": "startup|resume|clear|compact"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "root=\"$(git rev-parse --show-toplevel 2\u003e/dev/null)\" \u0026\u0026 [ -x \"$root/.llm-wiki/llm-wiki\" ] \u0026\u0026 \"$root/.llm-wiki/llm-wiki\" hook stop || exit 0",
+            "timeout": 15,
+            "type": "command"
+          }
+        ]
+      }
+    ]
+  }
+}

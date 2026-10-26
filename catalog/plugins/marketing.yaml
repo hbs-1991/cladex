@@ -1,0 +1,18 @@
+manifest_version: 1
+name: marketing
+label: Marketing
+description: >-
+  Create content, plan campaigns, and analyze performance across marketing
+  channels. Maintain brand voice consistency, track competitors, and report on
+  what's working. Eight skills and nothing executable — no commands, agents or
+  hooks — so installing it adds markdown to the prompt. It does ship a
+  .mcp.json naming optional third-party servers (Slack, Canva, Figma, HubSpot,
+  Notion and others); this system hands them no credentials, so they carry no
+  access you have not granted elsewhere. Slack, Canva, Figma, HubSpot and Notion
+  are in the connectors catalog too — add them there and they get a review, an
+  OAuth sign-in and tools the agent can actually call.
+version: "1.2.0"
+repo: https://github.com/anthropics/knowledge-work-plugins
+ref: 11ac5eeaca27c764913a06f1e61a7cb712790b1a
+subdir: marketing
+scopes: [turn, cron]

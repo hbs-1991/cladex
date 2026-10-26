@@ -1,0 +1,19 @@
+# Caddy in front of the agent (docker-compose.caddy.yml). CLADEX_HOST comes from
+# .env through the container's environment; Caddy obtains and renews the
+# certificates itself. `reverse_proxy` streams text/event-stream on its own, so
+# the SSE thread tail is never buffered.
+#
+# No `encode` here on purpose: the agent compresses its own responses
+# (`http/app.py`, which also knows to leave text/event-stream alone), and it has
+# to — a deployment behind a tunnel, or on a bare port, has no proxy at all.
+# Caddy passes an already-encoded body through, so an `encode` line would only
+# ever be dead config.
+{$CLADEX_HOST} {
+	reverse_proxy agent:8080
+}
+
+# The www name only redirects. If no DNS record exists for it Caddy keeps
+# retrying its certificate in the background and the apex is unaffected.
+www.{$CLADEX_HOST} {
+	redir https://{$CLADEX_HOST}{uri} permanent
+}

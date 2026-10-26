@@ -1,0 +1,17 @@
+manifest_version: 1
+name: hostinger
+label: Hostinger
+description: >
+  Hosting, domains, DNS and VPS management at Hostinger.
+  The official hostinger-api-mcp server, run locally with npx (needs Node 24).
+version: "1"
+transport: stdio
+command: npx
+args: ["-y", "hostinger-api-mcp@latest"]
+scopes: [turn, cron]
+env:
+  API_TOKEN: "${HOSTINGER_API_TOKEN}"
+auth:
+  - name: HOSTINGER_API_TOKEN
+    prompt: A Hostinger API token from hPanel → Account → API
+    url: https://hpanel.hostinger.com/profile/api

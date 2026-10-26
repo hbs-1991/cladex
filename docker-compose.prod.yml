@@ -1,0 +1,122 @@
+# Production overlay. Use together with the base file, never alone:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# The base file is what you run on a laptop: it assumes the machine is yours and
+# nothing else on it matters. Neither assumption holds on a shared host.
+services:
+  agent:
+    # An agent that talks for a living writes logs for a living. The default
+    # json-file driver has no ceiling, so a chatty week fills the disk and takes
+    # every other container on the host down with it — including ones that have
+    # nothing to do with this project.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # This box also runs an unrelated production stack on 2 CPUs. A turn spawns
+    # the Claude Code CLI, and an extension install shells out to uvx, which
+    # compiles wheels — left uncapped that is enough to starve a neighbour.
+    # These are ceilings, not reservations: nothing is taken away from the agent
+    # until it actually asks for this much.
+    #
+    # 2G is sized for the CLI plus one or two stdio MCP servers. If an install
+    # starts dying with exit 137, that is the OOM killer and this is the number
+    # to raise — do not "fix" it by removing the limit.
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.5"
+
+    # Docker's own restart policy handles crashes, but a wedged process that is
+    # still "up" is the failure mode restart policies miss. This asks the thing
+    # that actually matters: can the container still reach the database it cannot
+    # serve a single turn without? A file check would pass on a host whose
+    # Postgres has gone away.
+    #
+    # With `web_enabled: true` there is a second, cheaper probe — the alternative
+    # rather than the default, because `web_enabled` is a config.yaml key and this
+    # file cannot read it, so a compose default that assumed HTTP would fail every
+    # Telegram-only deployment:
+    #
+    #   test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+    #
+    # (`curl` is in the image — see the Dockerfile — and 8080 is `web_port`.) It
+    # answers "is this process still serving HTTP", which is the right question in
+    # webhook mode, where an agent that stopped serving stops receiving updates
+    # altogether. It deliberately does NOT touch the database: a probe that
+    # restarts the container because Postgres is busy turns a hiccup into an
+    # outage. Run both only if you want both failures to mean "restart".
+    healthcheck:
+      test: ["CMD", "python", "-c", "import asyncio,os,asyncpg\nasync def m():\n c=await asyncpg.connect(os.environ['CH_DATABASE_URL'].replace('+asyncpg',''))\n await c.close()\nasyncio.run(m())"]
+      interval: 60s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+
+  # Same ceiling as the agent: Postgres logs every connection error, and an agent
+  # in a restart loop can write those as fast as anything else on the host.
+  db:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # The worker spawns the Claude Code CLI exactly like the agent does — a
+  # scheduled job is a turn — so it gets the agent's ceilings, not smaller ones.
+  # Sized under them and an `ext install` inside a job dies with exit 137 while
+  # the same job run by the agent succeeds, which is a bug nobody finds twice.
+  worker:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.5"
+    # Same question as the agent's: can this process still reach the database it
+    # cannot run a single job without?
+    healthcheck:
+      test: ["CMD", "python", "-c", "import asyncio,os,asyncpg\nasync def m():\n c=await asyncpg.connect(os.environ['CH_DATABASE_URL'].replace('+asyncpg',''))\n await c.close()\nasyncio.run(m())"]
+      interval: 60s
+      timeout: 10s
+      start_period: 90s
+      retries: 3
+
+  # It only enqueues: no CLI, no database, no bucket. Small on purpose — if this
+  # one needs a gigabyte something is wrong with it, not with the limit.
+  scheduler:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.25"
+
+  # Redis holds the queue. If it starts writing errors as fast as it can — a full
+  # disk stopping the AOF rewrite is the usual reason — the log must not be what
+  # fills the rest of the disk.
+  redis:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  minio:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

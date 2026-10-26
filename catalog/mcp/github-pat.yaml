@@ -1,0 +1,16 @@
+manifest_version: 1
+name: github-pat
+label: GitHub (token)
+description: >
+  The GitHub MCP server with a personal access token instead of a sign-in.
+  For a fine-grained token scoped to a few repositories.
+version: "1"
+transport: http
+url: https://api.githubcopilot.com/mcp/
+scopes: [turn, cron]
+auth:
+  - name: GITHUB_PAT
+    prompt: A GitHub personal access token (fine-grained, with the repositories it may touch)
+    url: https://github.com/settings/personal-access-tokens
+    header: Authorization
+    format: "Bearer ${GITHUB_PAT}"

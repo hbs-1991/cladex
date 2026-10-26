@@ -1,0 +1,15 @@
+manifest_version: 1
+name: canva
+label: Canva
+description: >
+  Designs, folders and brand templates in Canva — find a design, read its contents
+  and export it. Canva's hosted MCP server: sign in with your Canva account.
+version: "1"
+transport: http
+url: https://mcp.canva.com/mcp
+scopes: [turn]
+auth:
+  - name: CANVA_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${CANVA_MCP_TOKEN}"

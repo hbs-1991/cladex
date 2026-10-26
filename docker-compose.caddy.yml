@@ -1,0 +1,50 @@
+# TLS at the edge without a Cloudflare account. Use together with the base file
+# and the production overlay, never alone:
+#
+#   CLADEX_HOST=cladex.example.com \
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#                  -f docker-compose.caddy.yml up -d --build
+#
+# The base file reaches the web channel through an outbound Cloudflare Tunnel
+# (PRD P8: no inbound ports). Where there is no Cloudflare account — or no
+# sudo to run a host nginx — this overlay puts Caddy in front instead: it owns
+# 80/443 on the host, obtains and renews the Let's Encrypt certificate for
+# CLADEX_HOST on its own, and proxies to agent:8080 over the compose network.
+# The agent itself still publishes nothing; the one inbound surface is TLS,
+# and behind it the same Telegram-identity login as behind the tunnel.
+#
+# CLADEX_HOST must already resolve to this host's public address, and 80/443
+# must be free — Caddy answers the ACME challenge on 80 itself. Put the value
+# in .env next to the secrets so `docker compose` picks it up on every upgrade.
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    # deploy/Caddyfile: the apex proxies to the agent, www redirects to the apex.
+    environment:
+      - CLADEX_HOST=${CLADEX_HOST:?set CLADEX_HOST to the public hostname}
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # certificates and ACME account — keep across rebuilds
+      - caddy_config:/config
+    depends_on:
+      - agent
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # The tunnel is what this overlay replaces. Behind a profile it is left out of
+  # a plain `up`, instead of restart-looping on an empty TUNNEL_TOKEN.
+  cloudflared:
+    profiles: ["tunnel"]
+
+volumes:
+  caddy_data:
+  caddy_config:

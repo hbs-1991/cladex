@@ -1,0 +1,18 @@
+manifest_version: 1
+name: finance
+label: Finance
+description: >-
+  Streamline finance and accounting workflows, from journal entries and
+  reconciliation to financial statements and variance analysis. Speed up audit
+  prep, month-end close, and keeping your books clean. Eight skills and nothing
+  executable — no commands, agents or hooks — so installing it adds markdown to
+  the prompt. It does ship a .mcp.json naming optional third-party servers
+  (Snowflake, Databricks, BigQuery, Slack and others); this system hands them
+  no credentials, so they carry no access you have not granted elsewhere. Slack is
+  in the connectors catalog too — add it there and it gets a review, an OAuth
+  sign-in and tools the agent can actually call.
+version: "1.3.0"
+repo: https://github.com/anthropics/knowledge-work-plugins
+ref: 11ac5eeaca27c764913a06f1e61a7cb712790b1a
+subdir: finance
+scopes: [turn, cron]

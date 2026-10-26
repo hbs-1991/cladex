@@ -1,0 +1,15 @@
+manifest_version: 1
+name: asana
+label: Asana
+description: >
+  Tasks, projects and portfolios in Asana — find work, read task detail, comment and
+  update status. Asana's hosted MCP server: sign in with your Asana account.
+version: "1"
+transport: http
+url: https://mcp.asana.com/v2/mcp
+scopes: [turn, cron]
+auth:
+  - name: ASANA_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${ASANA_MCP_TOKEN}"

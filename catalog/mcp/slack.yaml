@@ -1,0 +1,16 @@
+manifest_version: 1
+name: slack
+label: Slack
+description: >
+  Read and post in the Slack workspaces you belong to — channel history, search,
+  messages and threads. Slack's hosted MCP server: sign in with your Slack account,
+  and the workspace decides which channels the agent may see.
+version: "1"
+transport: http
+url: https://mcp.slack.com/mcp
+scopes: [turn, cron]
+auth:
+  - name: SLACK_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${SLACK_MCP_TOKEN}"

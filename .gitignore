@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+*.egg-info/
+.env
+.pytest_cache/
+data/
+.llm-wiki-state/
+.llm-wiki/
+.superpowers/
+docker-compose.override.yml
+build/
+.env.backup*
+
+# Claude Code subagent memory (`memory:` in .claude/agents/*.md): per-machine notes, not shared
+.claude/agent-memory/
+
+# Claude Code worktrees (`claude --worktree`, subagent isolation): local checkouts, never content
+.claude/worktrees/

@@ -1,0 +1,16 @@
+manifest_version: 1
+name: linear
+label: Linear
+description: >
+  Issues, projects and cycles in Linear — search, read, create and move work items.
+  Linear's hosted MCP server: sign in with your Linear account, and the workspace
+  decides what the agent may see.
+version: "1"
+transport: http
+url: https://mcp.linear.app/mcp
+scopes: [turn, cron]
+auth:
+  - name: LINEAR_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${LINEAR_MCP_TOKEN}"

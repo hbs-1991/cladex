@@ -1,0 +1,89 @@
+name: ci
+
+# The full gate on every pull request and every push to main: the backend suite
+# against real PostgreSQL, Redis and MinIO, ruff, the import-linter architecture
+# contracts, and the web unit tests, type-check and build. deploy.yml runs the same
+# job before a deploy; web.yml adds the Playwright run for changes under web/.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    # The gate the deployed commit has to pass. `web.yml` only fires on `web/**`,
+    # so a backend-only commit reaches production having had no frontend CI at all
+    # unless this job runs it. Playwright is left out: it needs a browser download
+    # and covers the same code the unit tests and the type-checker do, and this job
+    # sits between a person pressing the button and the outage starting.
+    runs-on: ubuntu-latest
+    # The suite talks to a real PostgreSQL now — every test process creates its own
+    # database on this server. Every port here is the one the matching
+    # `CH_TEST_*` default already points at (see tests/conftest.py and the
+    # `test-stack` make target), so the job needs no extra environment and CI and
+    # a laptop cannot drift apart.
+    #
+    # Redis and MinIO are optional for the suite: their fixtures skip when the
+    # service is down. CI runs them anyway — a skipped integration test on the one
+    # machine that gates a deploy is a test that is not protecting anything.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: hermes, POSTGRES_PASSWORD: hermes, POSTGRES_DB: hermes }
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U hermes" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["56379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+      # MinIO is NOT a service container: a `services:` entry cannot pass a
+      # command, and `quay.io/minio/minio` needs `server /data` as one. It is started as
+      # a step below instead — the same `docker run` the `test-stack` target uses.
+    env:
+      # Explicit rather than relying on the defaults: if a port above is ever
+      # changed, the suite fails here loudly instead of silently skipping the
+      # Redis and MinIO tests.
+      CH_TEST_DATABASE_URL: postgresql+asyncpg://hermes:hermes@127.0.0.1:55432/hermes
+      CH_TEST_REDIS_URL: redis://127.0.0.1:56379/15
+      CH_TEST_S3_ENDPOINT: http://127.0.0.1:59000
+      CH_TEST_S3_ACCESS_KEY: hermes
+      CH_TEST_S3_SECRET_KEY: hermes-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start MinIO
+        run: |
+          set -euo pipefail
+          docker run -d --name ci-minio \
+            -e MINIO_ROOT_USER=hermes -e MINIO_ROOT_PASSWORD=hermes-test \
+            -p 59000:9000 quay.io/minio/minio:latest server /data
+          # The blob tests skip on a connection error, so a MinIO that never came
+          # up would turn into a quiet pass. Wait for it and fail here instead.
+          for _ in $(seq 30); do
+            curl -sf http://127.0.0.1:59000/minio/health/live && exit 0
+            sleep 2
+          done
+          echo "MinIO did not become healthy"; docker logs ci-minio; exit 1
+
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[dev]"
+      - run: python -m pytest -q -p no:cacheprovider
+      - run: python -m ruff check src tests scripts
+      - run: lint-imports
+
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: web/package-lock.json }
+      - run: npm ci
+        working-directory: web
+      - run: npm run lint && npm run typecheck && npm run test && npm run build
+        working-directory: web

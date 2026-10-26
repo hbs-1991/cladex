@@ -1,0 +1,17 @@
+manifest_version: 1
+name: figma
+label: Figma
+description: >
+  Design context, screenshots and variables from your Figma files.
+  Figma's hosted MCP server: sign in with your Figma account. Figma grants the
+  mcp:connect scope only to approved clients: if the sign-in is refused, paste a
+  client id and secret from your own Figma OAuth app under Advanced and try again.
+version: "1"
+transport: http
+url: https://mcp.figma.com/mcp
+scopes: [turn]
+auth:
+  - name: FIGMA_MCP_TOKEN
+    kind: oauth
+    header: Authorization
+    format: "Bearer ${FIGMA_MCP_TOKEN}"

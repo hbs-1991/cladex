@@ -1,0 +1,183 @@
+# The deployment is `db + redis + minio + agent + worker + scheduler + cloudflared`.
+# Only `agent` talks to Telegram and serves HTTP; `worker` runs the queued work
+# (scheduled jobs, learning reviews, curator passes) and `scheduler` does nothing
+# but enqueue two periodic tasks.
+#
+# agent and worker are the same image with a different command, so everything they
+# share is one anchor: a mount or an environment variable that drifts between them
+# is a bug that only shows up in whichever half you did not test.
+
+# The connection strings the app processes need. Derived from the two passwords in
+# .env so a rotated password reaches every service at once, and so nothing here can
+# name a host that is not a service below.
+x-app-env: &app-env
+  CH_DATABASE_URL: postgresql+asyncpg://hermes:${POSTGRES_PASSWORD}@db:5432/hermes
+  # Setting this is what selects queue mode. Unset it (and drop worker/scheduler)
+  # to run everything inside the agent, the way a laptop does.
+  CH_REDIS_URL: redis://redis:6379/0
+  CH_S3_ENDPOINT: http://minio:9000
+  CH_S3_ACCESS_KEY: ${MINIO_ROOT_USER:-hermes}
+  CH_S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+  # Decrypts extension_secrets. Popped from os.environ at startup, in the agent
+  # and in the worker, before either can spawn the CLI.
+  CH_SECRETS_KEY: ${CH_SECRETS_KEY:?set CH_SECRETS_KEY in .env}
+
+# Everything the agent and the worker have in common. Both spawn the Claude Code
+# CLI, so both need the workspace and the read-only catalog; neither may differ in
+# what it can see, or a job would behave differently depending on which process
+# picked it up.
+x-app: &app
+  build: .
+  restart: unless-stopped
+  env_file: .env            # TELEGRAM_BOT_TOKEN, CLAUDE_CODE_OAUTH_TOKEN
+  environment: *app-env
+  volumes:
+    - ./data:/data
+    # The reviewed manifests, read-only ON PURPOSE. The agent runs as the owner of
+    # /data and has Bash, so anything it can write to is not a boundary. This mount
+    # is the only part of the catalog the agent cannot forge — that is the whole
+    # security model, not a deployment convenience. It also means a new manifest
+    # needs only a restart, not a rebuild.
+    - ./catalog:/app/catalog:ro
+
+services:
+  # Sessions, threads, jobs, costs, the extension registry, the encrypted
+  # extension secrets and the catalog drafts live here — not in files under
+  # ./data. The password is the only thing you set; CH_DATABASE_URL above is
+  # derived from it, so the two can never drift apart.
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hermes
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: hermes
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hermes -d hermes"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # The queue, and the locks that keep two workers from running one curator pass.
+  # appendonly: a restart must not lose the jobs already handed to the worker —
+  # the scheduler's claim has already moved `next_run_at` forward, so a dropped
+  # task is a run that silently never happens.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # Uploads and agent-produced files. Set `blob_backend: s3` in config.yaml to
+  # use it; with `local` the bucket simply stays empty and the files live on the
+  # data volume as before.
+  minio:
+    image: quay.io/minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address :9001
+    environment:
+      # A username, not a credential — defaulted so only the password
+      # has to be set. MINIO_ROOT_PASSWORD has no default on purpose.
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-hermes}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set MINIO_ROOT_PASSWORD in .env}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # Telegram and HTTP. Since Wave 3b it no longer RUNS turns in redis mode: a
+  # message becomes a `turns` row and a queued task, and the agent only waits for
+  # the end event. That is what makes a restart of this container survivable
+  # mid-turn — the worker finishes, the events are in PostgreSQL and the reply is
+  # on the row.
+  #
+  # `--scale agent=N` needs BOTH of these, and neither alone is enough:
+  #   * `telegram_mode: webhook` in config.yaml — only one process may long-poll a
+  #     bot token (every other one gets 409 Conflict and nobody answers), while N
+  #     may receive webhook POSTs behind the tunnel or Caddy. A repeated update_id
+  #     is dropped through Redis, so a retry that lands on a different instance is
+  #     still one turn;
+  #   * `CH_REDIS_URL` (set below) — in inline mode each instance starts its own
+  #     CronTicker and curator loop, so N instances are N clocks over one
+  #     database: harmless for the tick (the claim decides) and not harmless for
+  #     the curator, which would block on a lock a sibling holds.
+  agent:
+    <<: *app
+    # The agent runs `alembic upgrade head` at boot, so it must not start against
+    # a server that is still initialising its data directory.
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  # N of these are safe: claiming is a single transaction with SKIP LOCKED, so two
+  # workers ticking at the same second get disjoint job sets, and a turn is claimed
+  # by one `UPDATE ... WHERE status='queued'`. The worker never calls run_polling —
+  # only the agent talks to Telegram — but it DOES need the bot token (`env_file`
+  # above): since Wave 3b it runs the turns, and a turn's `ask_user` keyboard and
+  # `send_document` go out from whichever process ran it.
+  #
+  # `--max-async-tasks 4` is a memory dial, not a throughput one: a turn spawns the
+  # Claude Code CLI, so four concurrent turns are four CLI processes inside one
+  # container. Scale with replicas, not with this number.
+  worker:
+    <<: *app
+    command: taskiq worker claude_hermes.workers.taskiq_app:broker claude_hermes.workers.tasks --max-async-tasks 4
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      # The agent owns the migrations. A worker that started first would run
+      # against a schema that is not there yet.
+      agent:
+        condition: service_started
+
+  # A stateless enqueuer of two periodic tasks. It touches no database and no
+  # bucket, so it gets neither — and a duplicate is harmless, because the claim,
+  # not the enqueue, is what decides a job runs.
+  scheduler:
+    build: .
+    restart: unless-stopped
+    command: taskiq scheduler claude_hermes.workers.taskiq_app:scheduler
+    environment:
+      CH_REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # The only public surface: an outbound tunnel, not an inbound port. cloudflared
+  # dials Cloudflare, Cloudflare terminates TLS for the hostname you configured,
+  # and the tunnel route points at http://agent:8080 on this compose network — so
+  # the host still publishes nothing (PRD P8). TUNNEL_TOKEN comes from the tunnel
+  # you created in the Cloudflare dashboard; see docs/deploy.md.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${TUNNEL_TOKEN}
+    depends_on:
+      - agent
+
+volumes:
+  pgdata:
+  redisdata:
+  miniodata:

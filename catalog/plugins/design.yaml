@@ -1,0 +1,18 @@
+manifest_version: 1
+name: design
+label: Design
+description: >-
+  Accelerate design workflows — critique, design system management, UX writing,
+  accessibility audits, research synthesis, and dev handoff. From exploration to
+  pixel-perfect specs. Seven skills and nothing executable — no commands, agents
+  or hooks — so installing it adds markdown to the prompt. It does ship a
+  .mcp.json naming optional third-party servers (Figma, Linear, Asana,
+  Atlassian, Notion and others); this system hands them no credentials, so they
+  carry no access you have not granted elsewhere. Figma, Linear, Asana, Atlassian,
+  Slack and Notion are in the connectors catalog too — add them there and they get
+  a review, an OAuth sign-in and tools the agent can actually call.
+version: "1.2.0"
+repo: https://github.com/anthropics/knowledge-work-plugins
+ref: 11ac5eeaca27c764913a06f1e61a7cb712790b1a
+subdir: design
+scopes: [turn, cron]
