@@ -50,7 +50,9 @@ class WorkspaceMedia:
     @staticmethod
     def _resolve(boundary: Path, raw: str) -> tuple[Path, str]:
         """`(absolute path, path relative to agent_home)` or `ValueError(reason)`."""
-        text = str(raw or "").strip()
+        # Either separator, on any host: on Linux `Path` takes `\` for part of a
+        # name, so `content\img\x.png` would be one file and a second stored spelling.
+        text = str(raw or "").strip().replace("\\", "/")
         if not text:
             raise ValueError("an empty media path")
         given = Path(text)
